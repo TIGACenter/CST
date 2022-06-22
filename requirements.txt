@@ -1,0 +1,2 @@
+tensorflow-gpu==2.6.0
+tensorflow-probability==0.17.0
