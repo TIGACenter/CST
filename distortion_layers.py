@@ -108,52 +108,6 @@ class RandomSaturation(tf.keras.layers.Layer):
         return inputs
 
 
-class RandomBrightness(tf.keras.layers.Layer):
-    """
-    Layer to apply random brightness to input image. It multiplies the image complete
-    image by a random factor. A factor > 1 makes the image brighter, and < 1 makes it darker.
-
-    Image must be RGB [0,255] (int or float). Outputs image [0,255] (float).
-
-    Attributes:
-        - lower: (float) min factor to multiply image. has to be > 0.
-        - upper: (float) max factor to multiply image. has to be > lower.
-    """
-    def __init__(self, lower=1, upper=1.001):
-        super(RandomBrightness, self).__init__()
-        self.lower = lower
-        self.upper = upper
-
-    def call(self,inputs, training=None):
-        if training or training is None:
-            to_mul = tf.random.uniform(shape=[], minval=self.lower, maxval=self.upper, dtype=tf.float32)
-            return tf.clip_by_value(tf.multiply(inputs, to_mul), 0, 255)
-        return inputs
-
-
-class RandomBrightness(tf.keras.layers.Layer):
-    """
-    Layer to apply random brightness to input image. It multiplies the image complete
-    image by a random factor. A factor > 1 makes the image brighter, and < 1 makes it darker.
-
-    Image must be RGB [0,255] (int or float). Outputs image [0,255] (float).
-
-    Attributes:
-        - lower: (float) min factor to multiply image. has to be > 0.
-        - upper: (float) max factor to multiply image. has to be > lower.
-    """
-    def __init__(self, lower=1, upper=1.001):
-        super(RandomBrightness, self).__init__()
-        self.lower = lower
-        self.upper = upper
-
-    def call(self,inputs, training=None):
-        if training or training is None:
-            to_mul = tf.random.uniform(shape=[], minval=self.lower, maxval=self.upper, dtype=tf.float32)
-            return tf.clip_by_value(tf.multiply(inputs, to_mul), 0, 255)
-        return inputs
-
-
 class RandomGaussianBlur(tf.keras.layers.Layer):
     """
     Layer to apply gaussian blur to image. A gaussian kernel is convolved to the input image,
