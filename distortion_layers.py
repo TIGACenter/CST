@@ -131,6 +131,29 @@ class RandomBrightness(tf.keras.layers.Layer):
         return inputs
 
 
+class RandomBrightness(tf.keras.layers.Layer):
+    """
+    Layer to apply random brightness to input image. It multiplies the image complete
+    image by a random factor. A factor > 1 makes the image brighter, and < 1 makes it darker.
+
+    Image must be RGB [0,255] (int or float). Outputs image [0,255] (float).
+
+    Attributes:
+        - lower: (float) min factor to multiply image. has to be > 0.
+        - upper: (float) max factor to multiply image. has to be > lower.
+    """
+    def __init__(self, lower=1, upper=1.001):
+        super(RandomBrightness, self).__init__()
+        self.lower = lower
+        self.upper = upper
+
+    def call(self,inputs, training=None):
+        if training or training is None:
+            to_mul = tf.random.uniform(shape=[], minval=self.lower, maxval=self.upper, dtype=tf.float32)
+            return tf.clip_by_value(tf.multiply(inputs, to_mul), 0, 255)
+        return inputs
+
+
 class RandomGaussianBlur(tf.keras.layers.Layer):
     """
     Layer to apply gaussian blur to image. A gaussian kernel is convolved to the input image,
@@ -140,12 +163,12 @@ class RandomGaussianBlur(tf.keras.layers.Layer):
     shape [batch_size, height, width, channels].
 
     Attributes
-        - filter_shape: (tuple(int, int)) height and width of the gaussian kernel, respectively.
+        - filter_shape: (int) level of the gaussian kernel as a square. size = level * 2 + 1
         - sigma: (float) standard deviation of the gaussian kernel distribution.
         - interpolation: (str) interpolation applied for resizing
     """
 
-    def __init__(self, filter_shape=(3, 3), sigma=1., interpolation='bilinear'):
+    def __init__(self, filter_shape=1, sigma=1., interpolation='bilinear'):
         super(RandomGaussianBlur, self).__init__()
         self.filter_shape = filter_shape
         self.sigma = sigma
@@ -162,7 +185,7 @@ class RandomGaussianBlur(tf.keras.layers.Layer):
                     height=input_shape[-3], width=input_shape[-2], interpolation=self.interpolation)
             # adaptation from https://gist.github.com/blzq/c87d42f45a8c5a53f5b393e27b1f5319
 
-            gauss_kernel = self.gaussian_kernel(size=self.filter_shape[0], mean=0., std=sigma + .00001)
+            gauss_kernel = self.gaussian_kernel(size=self.filter_shape, mean=0., std=sigma + .00001)
             gauss_kernel = gauss_kernel[:, :, tf.newaxis, tf.newaxis]
             tf_image_B = tf.slice(inputs, [0, 0, 0, 0], [-1, -1, -1, 1])
             tf_image_G = tf.slice(inputs, [0, 0, 0, 1], [-1, -1, -1, 1])

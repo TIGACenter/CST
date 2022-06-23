@@ -1,2 +1,6 @@
-tensorflow-gpu==2.6.0
-tensorflow-probability==0.17.0
+jupyterlab==3.4.3
+ipykernel==6.15.0
+opencv-python==4.6.0
+matplotlib==3.5.2
+tensorflow-gpu==2.8.0
+tensorflow-probability==0.16.0
