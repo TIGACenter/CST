@@ -94,7 +94,7 @@ class CSTModel(tf.keras.Model):
                 y_true=y,
                 y_dists=y_dists,
                 binary=self.binary,
-                loss=self.compiled_loss,  # TODO pasar a compile
+                loss=self.compiled_loss,  # TODO to compile
                 st_loss=tf.keras.losses.kullback_leibler_divergence, # TODO pasar a compile
                 alpha=self.alpha # TODO pasar a compile
             )
@@ -109,12 +109,25 @@ class CSTModel(tf.keras.Model):
 
         for i, dist in enumerate(self.metrics_dists):
             dist.update_state(y, y_dists[i], sample_weight=sample_weight)
-            # print("\n" + str(dist._metrics[0][0].count))
-            # print("\n" + str(dist._metrics[0][0].total))
 
-
-        m_l_mean = {'loss': self.st_loss_tracker.result()}
-        # m_y = {m.name: m.result() for m in self.metrics if m.name != 'loss'}
-        m_y = {m.name: m.result() for m in self.metrics_i._metrics[0]}
+        m_l_mean = {'loss_0': self.st_loss_tracker.result()}
+        m_y = {m.name + "_": m.result() for m in self.metrics_i._metrics[0]}
         m_y_dist = {m.name: m.result() for d in self.metrics_dists for m in d._metrics[0] }
         return {**m_l_mean, **m_y, **m_y_dist}
+        # return {**self.compute_metrics(x, y, y_pred, sample_weight), **m_l_mean, **m_y, **m_y_dist}
+
+
+    def test_step(self, data):
+        if len(data) == 3:
+            x, y, sample_weight = data
+        else:
+            sample_weight = None
+            x, y = data
+
+        with tf.GradientTape() as tape:
+            x = self.preprocessing_layer(x)
+            x = self.rescale_layer(x)
+            y_pred = self(x, training=False)
+        # self.compute_loss(x, y, y_pred, sample_weight)
+        self.metrics_i.update_state(y, y_pred, sample_weight=sample_weight)
+        return {m.name: m.result() for m in self.metrics_i._metrics[0]}

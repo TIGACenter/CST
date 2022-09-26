@@ -108,6 +108,7 @@ class RandomSaturation(tf.keras.layers.Layer):
         return inputs
 
 
+
 class RandomGaussianBlur(tf.keras.layers.Layer):
     """
     Layer to apply gaussian blur to image. A gaussian kernel is convolved to the input image,
@@ -129,34 +130,34 @@ class RandomGaussianBlur(tf.keras.layers.Layer):
         self.interpolation = interpolation
         self.resize = None
 
-    def call(self, inputs, training=None):
+    def build(self, input_shape):
+        if self.resize is None:
+            self.resize = tf.keras.layers.Resizing(
+                height=input_shape[-3], width=input_shape[-2], interpolation=self.interpolation)
+
+    def call(self,inputs, training=None):
         if training or training is None:
-            inputs = tf.cast(inputs, dtype=tf.float32)
-            input_shape = tf.shape(inputs)
-            sigma = tf.random.uniform(shape=[], minval=0, maxval=self.sigma, dtype=tf.float32)
-            if self.resize is None:
-                self.resize = tf.keras.layers.Resizing(
-                    height=input_shape[-3], width=input_shape[-2], interpolation=self.interpolation)
-            # adaptation from https://gist.github.com/blzq/c87d42f45a8c5a53f5b393e27b1f5319
-
-            gauss_kernel = self.gaussian_kernel(size=self.filter_shape, mean=0., std=sigma + .00001)
-            gauss_kernel = gauss_kernel[:, :, tf.newaxis, tf.newaxis]
-            tf_image_B = tf.slice(inputs, [0, 0, 0, 0], [-1, -1, -1, 1])
-            tf_image_G = tf.slice(inputs, [0, 0, 0, 1], [-1, -1, -1, 1])
-            tf_image_R = tf.slice(inputs, [0, 0, 0, 2], [-1, -1, -1, 1])
-            strides = tf.ones(tf.size(tf.shape(inputs)))
-            tf_image_B = tf.nn.conv2d(tf_image_B, gauss_kernel, strides=[1,1,1,1], padding="SAME")
-            tf_image_G = tf.nn.conv2d(tf_image_G, gauss_kernel, strides=[1,1,1,1], padding="SAME")
-            tf_image_R = tf.nn.conv2d(tf_image_R, gauss_kernel, strides=[1,1,1,1], padding="SAME")
-            tf_image_B = tf.squeeze(tf_image_B)
-            tf_image_G = tf.squeeze(tf_image_G)
-            tf_image_R = tf.squeeze(tf_image_R)
-            x = tf.stack([tf_image_B, tf_image_G, tf_image_R], axis=-1)
-
-            # return self.resize(x)
-            return x
+            return tf.map_fn(fn=self.process_input, elems=inputs)
         return inputs
 
+    def process_input(self, input):
+        i= tf.cast(input, dtype=tf.float32)
+        i = i[tf.newaxis, ...]
+        sigma = tf.random.uniform(shape=[], minval=0, maxval=self.sigma, dtype=tf.float32)
+
+        gauss_kernel = self.gaussian_kernel(size=self.filter_shape, mean=0., std=sigma + .00001)
+        gauss_kernel = gauss_kernel[:, :, tf.newaxis, tf.newaxis]
+        tf_image_B = tf.slice(i, [0, 0, 0, 0], [-1, -1, -1, 1])
+        tf_image_G = tf.slice(i, [0, 0, 0, 1], [-1, -1, -1, 1])
+        tf_image_R = tf.slice(i, [0, 0, 0, 2], [-1, -1, -1, 1])
+        tf_image_B = tf.nn.conv2d(tf_image_B, gauss_kernel, strides=[1, 1, 1, 1], padding="VALID")
+        tf_image_G = tf.nn.conv2d(tf_image_G, gauss_kernel, strides=[1, 1, 1, 1], padding="VALID")
+        tf_image_R = tf.nn.conv2d(tf_image_R, gauss_kernel, strides=[1, 1, 1, 1], padding="VALID")
+        tf_image_B = tf.squeeze(tf_image_B)
+        tf_image_G = tf.squeeze(tf_image_G)
+        tf_image_R = tf.squeeze(tf_image_R)
+        x = tf.stack([tf_image_B, tf_image_G, tf_image_R], axis=-1)
+        return self.resize(x)
 
     @staticmethod
     def gaussian_kernel(size: int, mean: float, std: float):
@@ -225,8 +226,7 @@ class RandomCropLayer(tf.keras.layers.Layer):
 
 class RandomBrightness(tf.keras.layers.Layer):
     """
-    Layer to apply random brightness to input image. It multiplies the image complete
-    image by a random factor. A factor > 1 makes the image brighter, and < 1 makes it darker.
+    Layer to apply random brightness to input image.
 
     Image must be RGB [0,255] (int or float). Outputs image [0,255] (float).
 
