@@ -1,0 +1,13 @@
+
+command to build a docker desde home (ejecuta el archivo Dockerfile dentro de esa carpeta)
+$ docker build -t cp_toolbox ./cp_toolbox/docker
+
+desde la carpeta
+$ docker build -t cp_toolbox ./
+
+$ (en el local) docker run -p 8888:8888  -it --rm -v /home:/main_dir/felipe --runtime=nvidia cp_toolbox:latest /bin/bash
+
+command para abrir jupyter notebook en browser:
+jupyter notebook --port 8888 --ip 0.0.0.0 --allow-root --no-browser
+
+
