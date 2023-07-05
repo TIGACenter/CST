@@ -24,3 +24,6 @@ RUN apt-get install -y python3-openslide
 RUN apt install graphviz -y
 
 RUN apt-get update && apt-get install -y libsm6 libxext6 libxrender-dev ffmpeg
+
+RUN mkdir -p /.local/share/jupyter
+RUN chown -R 1000:1000 /.local/share/jupyter
