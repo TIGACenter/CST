@@ -25,7 +25,8 @@ def tiga_unrescale_layer():
 
 class DistortionLayer(tf.keras.layers.Layer):
     """
-    Utility layer that concatenates all distortion layers into one
+    Utility layer that concatenates all distortion layers into one.
+    Refer to jupyter notebooks for examples.
 
     Attributes:
         - layers: (list(layer)) list of layer instances to stack as a Sequential model
@@ -34,12 +35,20 @@ class DistortionLayer(tf.keras.layers.Layer):
         super(DistortionLayer, self).__init__()
         self.layers = layers
 
+    def get_config(self):
+        """ required to save model with this layer because it is custom """
+        config = super().get_config()
+        config.update({
+            "layers": self.layers,
+        })
+        return config
+
     def call(self, inputs, training=None):
         if training or training is None:
             if len(self.layers) > 0:
-                x = self.layers[0](inputs)
+                x = self.layers[0].call(inputs, training=training)
                 for layer in self.layers[1:]:
-                    x = layer(x)
+                    x = layer.call(x, training=training)
                 return x
         return inputs
 
@@ -60,6 +69,14 @@ class RandomColorByChannel(tf.keras.layers.Layer):
     def __init__(self, factor=[0,0,0]):
         super(RandomColorByChannel, self).__init__()
         self.factor = tf.constant(factor, dtype=tf.float32)
+
+    def get_config(self):
+        """ required to save model with this layer because it is custom """
+        config = super().get_config()
+        config.update({
+            "factor": self.factor
+        })
+        return config
 
     def call(self, inputs, training=None):
         if training or training is None:
@@ -102,11 +119,19 @@ class RandomSaturation(tf.keras.layers.Layer):
         self.lower = lower
         self.upper = upper
 
+    def get_config(self):
+        """ required to save model with this layer because it is custom """
+        config = super().get_config()
+        config.update({
+            "lower": self.lower,
+            "upper": self.upper
+        })
+        return config
+
     def call(self,inputs, training=None):
         if training or training is None:
             return tf.image.random_saturation(inputs, self.lower, self.upper)
         return inputs
-
 
 
 class RandomGaussianBlur(tf.keras.layers.Layer):
@@ -130,6 +155,17 @@ class RandomGaussianBlur(tf.keras.layers.Layer):
         self.interpolation = interpolation
         self.resize = None
 
+    def get_config(self):
+        """ required to save model with this layer because it is custom """
+        config = super().get_config()
+        config.update({
+            "filter_shape": self.filter_shape,
+            "sigma": self.sigma,
+            "interpolation": self.interpolation,
+            "resize": self.resize
+        })
+        return config
+
     def build(self, input_shape):
         if self.resize is None:
             self.resize = tf.keras.layers.Resizing(
@@ -141,7 +177,7 @@ class RandomGaussianBlur(tf.keras.layers.Layer):
         return inputs
 
     def process_input(self, input):
-        i= tf.cast(input, dtype=tf.float32)
+        i = tf.cast(input, dtype=tf.float32)
         i = i[tf.newaxis, ...]
         sigma = tf.random.uniform(shape=[], minval=0, maxval=self.sigma, dtype=tf.float32)
 
@@ -150,14 +186,19 @@ class RandomGaussianBlur(tf.keras.layers.Layer):
         tf_image_B = tf.slice(i, [0, 0, 0, 0], [-1, -1, -1, 1])
         tf_image_G = tf.slice(i, [0, 0, 0, 1], [-1, -1, -1, 1])
         tf_image_R = tf.slice(i, [0, 0, 0, 2], [-1, -1, -1, 1])
-        tf_image_B = tf.nn.conv2d(tf_image_B, gauss_kernel, strides=[1, 1, 1, 1], padding="VALID")
-        tf_image_G = tf.nn.conv2d(tf_image_G, gauss_kernel, strides=[1, 1, 1, 1], padding="VALID")
-        tf_image_R = tf.nn.conv2d(tf_image_R, gauss_kernel, strides=[1, 1, 1, 1], padding="VALID")
+        # tf_image_B = tf.nn.conv2d(tf_image_B, gauss_kernel, strides=[1, 1, 1, 1], padding="VALID")
+        # tf_image_G = tf.nn.conv2d(tf_image_G, gauss_kernel, strides=[1, 1, 1, 1], padding="VALID")
+        # tf_image_R = tf.nn.conv2d(tf_image_R, gauss_kernel, strides=[1, 1, 1, 1], padding="VALID")
+        tf_image_B = tf.nn.conv2d(tf_image_B, gauss_kernel, strides=[1, 1, 1, 1], padding="SAME")
+        tf_image_G = tf.nn.conv2d(tf_image_G, gauss_kernel, strides=[1, 1, 1, 1], padding="SAME")
+        tf_image_R = tf.nn.conv2d(tf_image_R, gauss_kernel, strides=[1, 1, 1, 1], padding="SAME")
         tf_image_B = tf.squeeze(tf_image_B)
         tf_image_G = tf.squeeze(tf_image_G)
         tf_image_R = tf.squeeze(tf_image_R)
         x = tf.stack([tf_image_B, tf_image_G, tf_image_R], axis=-1)
-        return self.resize(x)
+        return x
+        # return self.resize(x)  # TODO not working due to "image containes no shape" error.
+                                 #  This is needed for "VALID" padding
 
     @staticmethod
     def gaussian_kernel(size: int, mean: float, std: float):
@@ -183,6 +224,15 @@ class GaussianNoise(tf.keras.layers.Layer):
         super(GaussianNoise, self).__init__()
         self.mean = mean
         self.std = std
+
+    def get_config(self):
+        """ required to save model with this layer because it is custom """
+        config = super().get_config()
+        config.update({
+            "mean": self.mean,
+            "std": self.std
+        })
+        return config
 
     def call(self, inputs, training=None):
         if training or training is None:
@@ -217,6 +267,19 @@ class RandomCropLayer(tf.keras.layers.Layer):
             (-(1 - self.min_height), -(1 - self.max_height)), (-(1 - self.min_width), -(1 - self.max_width))
         )
 
+    def get_config(self):
+        """ required to save model with this layer because it is custom """
+        config = super().get_config()
+        config.update({
+            "min_height": self.min_height,
+            "min-width": self.min_width,
+            "max_height": self.max_height,
+            "max_width": self.max_width,
+            "random_translation": self.random_translation,
+            "random_zoom": self.random_zoom
+        })
+        return config
+
     def call(self, inputs, training=None):
         if training or training is None:
             x = self.random_translation(inputs)
@@ -239,6 +302,15 @@ class RandomBrightness(tf.keras.layers.Layer):
         self.lower = lower
         self.upper = upper
 
+    def get_config(self):
+        """ required to save model with this layer because it is custom """
+        config = super().get_config()
+        config.update({
+            "lower": self.lower,
+            "upper": self.upper
+        })
+        return config
+
     def call(self,inputs, training=None):
         if training or training is None:
             return tf.map_fn(fn=self.process_input, elems=inputs)
@@ -247,3 +319,19 @@ class RandomBrightness(tf.keras.layers.Layer):
     def process_input(self, input):
         to_mul = tf.random.uniform(shape=[], minval=self.lower, maxval=self.upper, dtype=tf.float32)
         return tf.clip_by_value(tf.multiply(input, to_mul), 0, 255)
+
+
+class BlueRedChannelSwapLayer(tf.keras.layers.Layer):
+    """
+    Converts RGB image to BGR or vice versa
+    To make it a big more general this could be used:
+    ´channels = tf.unstack (image, axis=-1)
+    image = tf.stack ([channels[2], channels[1], channels[0]], axis=-1)´
+    """
+    def __init__(self):
+        super(BlueRedChannelSwapLayer, self).__init__()
+
+    def call(self, images):
+        r_b_swapped = tf.reverse(images, axis=[-1])
+        # r_b_swapped = imgs[..., ::-1]
+        return r_b_swapped
