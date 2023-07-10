@@ -106,6 +106,47 @@ class CSTModel(tf.keras.Model):
             name="cst",
         )
 
+    def _forward_pass(self, x, y, training=True):
+        with tf.GradientTape() as tape:
+            x_dists = [dist_layer(x, training=training) for dist_layer in self.dist_layers]
+            x_dists = [self.preprocessing_layer(x_dist) for x_dist in x_dists]
+            x_dists = [self.rescale_layer(x_dist) for x_dist in x_dists]
+            y_dists = [self.call(x_dist, training=training) for x_dist in x_dists]
+
+            x = self.preprocessing_layer(x)
+            x = self.rescale_layer(x)
+            y_pred = self.call(x, training=training)
+
+            loss = self.st_loss_fn(
+                y_pred=y_pred,
+                y_true=y,
+                y_dists=y_dists,
+                binary=self.binary,
+                loss=self.compiled_loss,  # TODO to compile
+                st_loss=tf.keras.losses.kullback_leibler_divergence,  # TODO pasar a compile
+                alpha=self.alpha  # TODO pasar a compile
+            )
+        return y_pred, y_dists, loss, tape
+
+    def _update_states(self, y, y_pred, y_dists, loss, sample_weight):
+        """
+        Updates states of loss and metrics and returns verbose shown during training
+        """
+
+        self.st_loss_tracker.update_state(loss)
+        # self.compiled_metrics.update_state(y, y_pred, sample_weight=sample_weight)
+        self.metrics_i.update_state(y, y_pred, sample_weight=sample_weight)
+        for i, dist in enumerate(self.metrics_dists):
+            dist.update_state(y, y_dists[i], sample_weight=sample_weight)
+
+        stacked_pred = tf.concat([y_pred[tf.newaxis, ...], y_dists], axis=0)
+        self.cst_metric.update_state(y, stacked_pred, sample_weight=sample_weight)
+
+        m_l_mean = {'loss_0': self.st_loss_tracker.result(), "cst_metric": self.cst_metric.result()}
+        m_y = {m.name + "_": m.result() for m in self.metrics_i._metrics[0]}
+        m_y_dist = {m.name: m.result() for d in self.metrics_dists for m in d._metrics[0]}
+        return {**m_l_mean, **m_y, **m_y_dist}
+
     def train_step(self, data):
         # https://www.tensorflow.org/guide/keras/customizing_what_happens_in_fit
         # unpack data
@@ -134,26 +175,29 @@ class CSTModel(tf.keras.Model):
                 st_loss=tf.keras.losses.kullback_leibler_divergence, # TODO pasar a compile
                 alpha=self.alpha # TODO pasar a compile
             )
+        # y_pred, y_dists, loss, tape = self._forward_pass(x, y, training=True)
 
         trainable_vars = self.trainable_variables
         gradients = tape.gradient(loss, trainable_vars)
         self.optimizer.apply_gradients(zip(gradients, trainable_vars))
 
-        self.st_loss_tracker.update_state(loss)
-        # self.compiled_metrics.update_state(y, y_pred, sample_weight=sample_weight)
-        self.metrics_i.update_state(y, y_pred, sample_weight=sample_weight)
-        for i, dist in enumerate(self.metrics_dists):
-            dist.update_state(y, y_dists[i], sample_weight=sample_weight)
+        # self.st_loss_tracker.update_state(loss)
+        # # self.compiled_metrics.update_state(y, y_pred, sample_weight=sample_weight)
+        # self.metrics_i.update_state(y, y_pred, sample_weight=sample_weight)
+        # for i, dist in enumerate(self.metrics_dists):
+        #     dist.update_state(y, y_dists[i], sample_weight=sample_weight)
+        #
+        # stacked_pred = tf.concat([y_pred[tf.newaxis, ...], y_dists], axis=0)
+        # self.cst_metric.update_state(y, stacked_pred, sample_weight=sample_weight)
+        # m_l_mean = {'loss_0': self.st_loss_tracker.result(), "cst_metric": self.cst_metric.result()}
+        # # m_l_mean = {'loss_0': self.st_loss_tracker.result()}
+        # m_y = {m.name + "_": m.result() for m in self.metrics_i._metrics[0]}
+        # m_y_dist = {m.name: m.result() for d in self.metrics_dists for m in d._metrics[0] }
+        # return {**m_l_mean, **m_y, **m_y_dist}
 
-        stacked_pred = tf.concat([y_pred[tf.newaxis, ...], y_dists], axis=0)
-        self.cst_metric.update_state(y, stacked_pred, sample_weight=sample_weight)
-        m_l_mean = {'loss_0': self.st_loss_tracker.result(), "cst_metric": self.cst_metric.result()}
+        verbose_metrics = self._update_states(y, y_pred, y_dists, loss, sample_weight)
+        return verbose_metrics
 
-        # m_l_mean = {'loss_0': self.st_loss_tracker.result()}
-        m_y = {m.name + "_": m.result() for m in self.metrics_i._metrics[0]}
-        m_y_dist = {m.name: m.result() for d in self.metrics_dists for m in d._metrics[0] }
-        return {**m_l_mean, **m_y, **m_y_dist}
-        # return {**self.compute_metrics(x, y, y_pred, sample_weight), **m_l_mean, **m_y, **m_y_dist}
 
 
     def test_step(self, data):
@@ -163,10 +207,29 @@ class CSTModel(tf.keras.Model):
             sample_weight = None
             x, y = data
 
-        with tf.GradientTape() as tape:
+        with tf.GradientTape():
+            x_dists = [dist_layer(x, training=None) for dist_layer in self.dist_layers]
+            x_dists = [self.preprocessing_layer(x_dist) for x_dist in x_dists]
+            x_dists = [self.rescale_layer(x_dist) for x_dist in x_dists]
+            y_dists = [self(x_dist, training=None) for x_dist in x_dists]
+
             x = self.preprocessing_layer(x)
             x = self.rescale_layer(x)
-            y_pred = self(x, training=False)
-        # self.compute_loss(x, y, y_pred, sample_weight)
-        self.metrics_i.update_state(y, y_pred, sample_weight=sample_weight)
-        return {m.name: m.result() for m in self.metrics_i._metrics[0]}
+            y_pred = self(x, training=None)
+
+            loss = self.st_loss_fn(
+                y_pred=y_pred,
+                y_true=y,
+                y_dists=y_dists,
+                binary=self.binary,
+                loss=self.compiled_loss,  # TODO to compile
+                st_loss=tf.keras.losses.kullback_leibler_divergence,  # TODO pasar a compile
+                alpha=self.alpha  # TODO pasar a compile
+            )
+        # _pred, y_dists, loss = self._forward_pass(x, y, training=None)
+
+
+        # self.metrics_i.update_state(y, y_pred, sample_weight=sample_weight)
+        # return {m.name: m.result() for m in self.metrics_i._metrics[0]}
+        verbose_metrics = self._update_states(y, y_pred, y_dists, loss, sample_weight)
+        return verbose_metrics

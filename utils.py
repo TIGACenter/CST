@@ -6,6 +6,10 @@ from tensorflow.keras.applications import InceptionV3, ResNet50
 
 
 def list_file_paths(directory, extension=[".tif", ".png"]):
+    """
+    lists all files in ´directory´ and its sub-folders with
+    extensions in ´extension´
+    """
     paths = []
     for path, _, files in os.walk(directory):
         for name in files:
