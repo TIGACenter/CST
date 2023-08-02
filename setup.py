@@ -6,7 +6,7 @@ install_requires = [str(r) for r in parse_requirements(open(REQUIREMENTS_FILE, '
 
 
 setup(
-    name='cp_toolbox',
+    name='CST',
     packages=find_packages(),
     version='0.1.0',
     description='CNN Stability Training',

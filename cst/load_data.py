@@ -9,7 +9,7 @@ import tensorflow as tf
 import numpy as np
 import cv2
 
-import utils
+from . import utils
 
 
 def load_aj_idc(PATH=None):

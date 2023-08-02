@@ -43,12 +43,12 @@ class DistortionLayer(tf.keras.layers.Layer):
         })
         return config
 
-    def call(self, inputs, training=None):
-        if training or training is None:
+    def call(self, inputs,  **kwargs):
+        if kwargs['training'] or kwargs['training'] is None:
             if len(self.layers) > 0:
-                x = self.layers[0].call(inputs, training=training)
+                x = self.layers[0].__call__(inputs,  **kwargs)
                 for layer in self.layers[1:]:
-                    x = layer.call(x, training=training)
+                    x = layer.__call__(x,  **kwargs)
                 return x
         return inputs
 
@@ -311,7 +311,7 @@ class RandomBrightness(tf.keras.layers.Layer):
         })
         return config
 
-    def call(self,inputs, training=None):
+    def call(self, inputs, training=None):
         if training or training is None:
             return tf.map_fn(fn=self.process_input, elems=inputs)
         return inputs
@@ -331,7 +331,7 @@ class BlueRedChannelSwapLayer(tf.keras.layers.Layer):
     def __init__(self):
         super(BlueRedChannelSwapLayer, self).__init__()
 
-    def call(self, images):
+    def call(self, images, **kwargs):
         r_b_swapped = tf.reverse(images, axis=[-1])
         # r_b_swapped = imgs[..., ::-1]
         return r_b_swapped

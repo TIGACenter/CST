@@ -1,28 +1,34 @@
+import time
 import sys
+import numpy as np
 
 import tensorflow as tf
 from tensorflow.python.keras.engine import compile_utils
 
-from distortion_layers import tiga_rescale_layer
+from .distortion_layers import tiga_rescale_layer
 
 
 def st_loss(y_pred, y_true, y_dists, loss, st_loss, alpha=1, binary=False):
     l_0 = loss(y_true, y_pred)
     l_stab = sum([st_loss(y_pred, y_d) for y_d in y_dists])
+
     if binary:
         l_stab += sum([st_loss(1 - y_pred, 1 - y_d) for y_d in y_dists])
+
     return l_stab * alpha + l_0
 
 
 def cst_metric(y_true, y_pred, base_metric, st_metric, alpha=1, binary=False):
     y_pred = tf.unstack(y_pred)  # y_pred is a tf tensor.
-    y_p = tf.squeeze(y_pred[0])  # y_pred[0] is the prediction on originals,
-    y_d = [tf.squeeze(i) for i in y_pred[1:]]  # y_pred[1:] is prediction on distorted
+    # y_p = tf.squeeze(y_pred[0])  # y_pred[0] is the prediction on originals,
+    # y_d = [tf.squeeze(i) for i in y_pred[1:]]  # y_pred[1:] is prediction on distorted
+    y_p = y_pred[0]  # y_pred[0] is the prediction on originals,
+    y_d = [i for i in y_pred[1:]]  # y_pred[1:] is prediction on distorted
 
     l_0 = base_metric(y_true, y_p)
     l_stab = sum([st_metric(y_p, d) for d in y_d])
     if binary:
-        l_stab += sum([st_metric(1 - y_pred, 1 - d) for d in y_d])
+        l_stab += sum([st_metric(1 - y_p, 1 - d) for d in y_d])
     return l_stab * alpha + l_0
 
 
@@ -66,6 +72,7 @@ class CSTModel(tf.keras.Model):
             alpha=1,
             n_st_components=0,
             binary=False,
+            save_images=False,
             **kwargs
     ):
         super().__init__(**kwargs)
@@ -89,6 +96,7 @@ class CSTModel(tf.keras.Model):
             self.n_st_components = len(self.dist_layers)
         else:
             self.dist_layers = [dist_layers for _ in range(self.n_st_components)]
+        self.save_images = save_images
 
     def compile(self, **kwargs):
         super(CSTModel, self).compile(**kwargs)
@@ -106,27 +114,27 @@ class CSTModel(tf.keras.Model):
             name="cst",
         )
 
-    def _forward_pass(self, x, y, training=True):
-        with tf.GradientTape() as tape:
-            x_dists = [dist_layer(x, training=training) for dist_layer in self.dist_layers]
-            x_dists = [self.preprocessing_layer(x_dist) for x_dist in x_dists]
-            x_dists = [self.rescale_layer(x_dist) for x_dist in x_dists]
-            y_dists = [self.call(x_dist, training=training) for x_dist in x_dists]
-
-            x = self.preprocessing_layer(x)
-            x = self.rescale_layer(x)
-            y_pred = self.call(x, training=training)
-
-            loss = self.st_loss_fn(
-                y_pred=y_pred,
-                y_true=y,
-                y_dists=y_dists,
-                binary=self.binary,
-                loss=self.compiled_loss,  # TODO to compile
-                st_loss=tf.keras.losses.kullback_leibler_divergence,  # TODO pasar a compile
-                alpha=self.alpha  # TODO pasar a compile
-            )
-        return y_pred, y_dists, loss, tape
+    # def _forward_pass(self, x, y, training=True):
+    #     with tf.GradientTape() as tape:
+    #         x_dists = [dist_layer(x, training=training) for dist_layer in self.dist_layers]
+    #         x_dists = [self.preprocessing_layer(x_dist) for x_dist in x_dists]
+    #         x_dists = [self.rescale_layer(x_dist) for x_dist in x_dists]
+    #         y_dists = [self.call(x_dist, training=training) for x_dist in x_dists]
+    #
+    #         x = self.preprocessing_layer(x)
+    #         x = self.rescale_layer(x)
+    #         y_pred = self.call(x, training=training)
+    #
+    #         loss = self.st_loss_fn(
+    #             y_pred=y_pred,
+    #             y_true=y,
+    #             y_dists=y_dists,
+    #             binary=self.binary,
+    #             loss=self.compiled_loss,  # TODO to compile
+    #             st_loss=tf.keras.losses.kullback_leibler_divergence,  # TODO pasar a compile
+    #             alpha=self.alpha  # TODO pasar a compile
+    #         )
+    #     return y_pred, y_dists, loss, tape
 
     def _update_states(self, y, y_pred, y_dists, loss, sample_weight):
         """
@@ -166,15 +174,31 @@ class CSTModel(tf.keras.Model):
             x = self.rescale_layer(x)
             y_pred = self(x, training=True)
 
+            if self.run_eagerly and self.save_images:
+                x_np = x.numpy()
+                x_dists_np = [x_dist.numpy() for x_dist in x_dists]
+                y_pred_np = y_pred.numpy()
+                y_np = y.numpy()
+                y_dists_np = [y_dist.numpy() for y_dist in y_dists]
+                for i in range(x_np.shape[0]):
+                    name = int(time.time() * 1000)
+                    tf.keras.utils.save_img(f"{name}.png", x_np[i])
+                    tf.keras.utils.save_img(f"{name}_y.png", y_pred_np[i] * 255)
+                    tf.keras.utils.save_img(f"{name}_true.png", y_np[i])
+                    for j in range(len(x_dists_np)):
+                        tf.keras.utils.save_img(f"{name}_dist{j}.png", x_dists_np[j][i])
+                        tf.keras.utils.save_img(f"{name}_y_dist{j}.png", y_dists_np[j][i])
+
             loss = self.st_loss_fn(
                 y_pred=y_pred,
                 y_true=y,
                 y_dists=y_dists,
                 binary=self.binary,
                 loss=self.compiled_loss,  # TODO to compile
-                st_loss=tf.keras.losses.kullback_leibler_divergence, # TODO pasar a compile
+                st_loss=tf.keras.losses.KLDivergence(), # TODO pasar a compile
                 alpha=self.alpha # TODO pasar a compile
             )
+
         # y_pred, y_dists, loss, tape = self._forward_pass(x, y, training=True)
 
         trainable_vars = self.trainable_variables
@@ -211,11 +235,11 @@ class CSTModel(tf.keras.Model):
             x_dists = [dist_layer(x, training=None) for dist_layer in self.dist_layers]
             x_dists = [self.preprocessing_layer(x_dist) for x_dist in x_dists]
             x_dists = [self.rescale_layer(x_dist) for x_dist in x_dists]
-            y_dists = [self(x_dist, training=None) for x_dist in x_dists]
+            y_dists = [self(x_dist, training=False) for x_dist in x_dists]
 
             x = self.preprocessing_layer(x)
             x = self.rescale_layer(x)
-            y_pred = self(x, training=None)
+            y_pred = self(x, training=False)
 
             loss = self.st_loss_fn(
                 y_pred=y_pred,
