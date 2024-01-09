@@ -1,8 +1,17 @@
-jupyterlab==3.4.3
-notebook==6.4.12
-ipykernel==6.15.0
-opencv-python==4.6.0.66
-matplotlib==3.5.2
-# tensorflow-gpu==2.8.0
-tensorflow-probability==0.16.0
-scipy==1.8.1
+# jupyterlab==3.4.3
+# notebook==6.4.12
+# ipykernel==6.15.0
+# opencv-python==4.6.0.66
+# matplotlib==3.5.2
+# # tensorflow-gpu==2.8.0
+# tensorflow-probability==0.16.0
+# scipy==1.8.1
+
+jupyterlab
+notebook
+ipykernel
+opencv-python
+matplotlib
+# tensorflow-gpu
+tensorflow-probability
+scipy
