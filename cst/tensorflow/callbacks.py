@@ -4,7 +4,7 @@ import pathlib
 
 
 class EpochSaver(tf.keras.callbacks.Callback):
-    def __init__(self, layer_name, model_path, base_name):
+    def __init__(self, model_path, base_name, layer_name=None):
         self.layer_name = layer_name
         self.model_path = model_path
         self.base_name = base_name
@@ -15,6 +15,9 @@ class EpochSaver(tf.keras.callbacks.Callback):
             return
         pathlib.Path(self.model_path).mkdir(parents=True, exist_ok=True)
         path = os.path.join(self.model_path, self.base_name) + "_e" + str(epoch + 1) + ".h5"
-        self.model.get_layer(self.layer_name).save(path)
+        if self.layer_name is None:
+            self.model.save(path)
+        else:
+            self.model.get_layer(self.layer_name).save(path)
         print("class weights saved to path: ")
         print(path)
